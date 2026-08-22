@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>Libro de Facturas</title>
+<link rel="manifest" href="./manifest.json" />
+<link rel="icon" type="image/png" href="./icon-192.png" />
+<link rel="apple-touch-icon" href="./icon-192.png" />
+<meta name="theme-color" content="#065f46" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<style>
+:root{--v:#065f46;--v2:#047857;--am:#f59e0b;--pi:#e7e5e4;--tx:#1c1917;--gr:#78716c;--bg:#f5f5f4}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px}
+#app{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column}
+header{background:var(--v);color:#fff;padding:16px 16px 14px;position:sticky;top:0;z-index:30}
+header h1{margin:0;font-size:18px;font-weight:700}
+header .sub{font-size:12px;color:#a7f3d0;margin-top:2px}
+main{flex:1;padding:12px 14px 88px;overflow-y:auto}
+nav{position:fixed;bottom:0;left:0;right:0;max-width:480px;margin:0 auto;background:#fff;border-top:1px solid var(--pi);display:flex;z-index:30}
+nav button{flex:1;background:none;border:0;padding:8px 4px 10px;color:#a8a29e;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit}
+nav button.on{color:var(--v2)}
+nav button div{font-size:19px;line-height:1.2}
+.card{background:#fff;border:1px solid var(--pi);border-radius:12px;padding:12px;margin-bottom:10px}
+.btn{width:100%;background:var(--v2);color:#fff;border:0;border-radius:10px;padding:13px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit}
+.btn:disabled{opacity:.55}
+.btn2{background:#fff;color:var(--gr);border:1px solid #d6d3d1}
+.btn3{background:#fff;color:var(--v2);border:1px solid #6ee7b7}
+label{display:block;font-size:11px;font-weight:600;color:var(--gr);text-transform:uppercase;letter-spacing:.03em;margin:8px 0 3px}
+input,select{width:100%;padding:9px 10px;border:1px solid #d6d3d1;border-radius:8px;font-size:15px;font-family:inherit;background:#fff}
+input:focus,select:focus{outline:2px solid var(--v2);outline-offset:-1px}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.mut{color:var(--gr);font-size:12px}
+.sm{font-size:12px}.xs{font-size:11px}
+.b{font-weight:700}
+.right{text-align:right}
+.sep{border:0;border-top:1px dashed #d6d3d1;margin:10px 0}
+.pill{display:inline-block;background:#d1fae5;color:#065f46;border-radius:99px;padding:2px 9px;font-size:11px;font-weight:600}
+.pill.w{background:#fef3c7;color:#92400e}.pill.r{background:#fee2e2;color:#991b1b}
+.stat{background:#fff;border:1px solid var(--pi);border-radius:12px;padding:10px}
+.stat .n{font-size:21px;font-weight:700}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px}
+.item{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:9px 0;border-bottom:1px solid #f0efee}
+.item:last-child{border-bottom:0}
+.calc{background:#fafaf9;border-radius:9px;padding:9px;margin-top:8px}
+.calc div{display:flex;justify-content:space-between;align-items:center;margin:3px 0}
+.toast{position:fixed;bottom:92px;left:50%;transform:translateX(-50%);background:#1c1917;color:#fff;padding:10px 16px;border-radius:99px;font-size:13px;z-index:60;max-width:88%;text-align:center}
+.center{display:flex;flex-direction:column;justify-content:center;min-height:100vh;padding:24px}
+.drop{border:2px dashed #6ee7b7;border-radius:12px;padding:26px;text-align:center;color:var(--v2);display:block;cursor:pointer}
+.drop input{position:absolute;width:1px;height:1px;opacity:0}
+.q{display:flex;gap:9px;align-items:center;border:1px solid var(--pi);border-radius:9px;padding:8px;margin-top:8px}
+.q img{width:38px;height:38px;object-fit:cover;border-radius:6px;flex-shrink:0}
+.bar{height:6px;background:#f0efee;border-radius:99px;overflow:hidden;margin-top:3px}
+.bar i{display:block;height:100%;background:var(--v2)}
+.err{background:#fee2e2;color:#991b1b;border-radius:8px;padding:9px;font-size:13px;margin-bottom:10px}
+.warn{background:#fef3c7;color:#92400e;border-radius:8px;padding:9px;font-size:12px;margin-bottom:10px}
+.link{background:none;border:0;color:var(--v2);font-size:13px;font-weight:600;cursor:pointer;padding:0;font-family:inherit}
+</style>
+</head>
+<body>
+<div id="app"><div class="center"><p class="mut" style="text-align:center">Cargando…</p></div></div>
+
+<script>
+/* ============ Configuración ============ */
+// En producción, apunta a tu servidor. Vacío = mismo origen.
+const API = localStorage.getItem("api_url") || "";
+
+/* ============ Estado ============ */
+let S = { tok: localStorage.getItem("tok") || null, me: null, vista: "inicio",
+          facturas: [], catalogo: {proveedores:[],presentaciones:[]},
+          borrador: null, cola: [], activo: null, cargando: false };
+
+const $ = (h) => { const d=document.createElement("div"); d.innerHTML=h.trim(); return d.firstChild; };
+const rd = (n) => "RD$" + (Number(n)||0).toLocaleString("es-DO",{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc = (s) => String(s??"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const hoy = () => new Date().toISOString().slice(0,10);
+const norm = (s) => (s||"").trim().toLowerCase().replace(/\s+/g," ");
+
+function toast(m){ const t=$(`<div class="toast">${esc(m)}</div>`); document.body.appendChild(t); setTimeout(()=>t.remove(),3000); }
+
+async function api(ruta, opts={}){
+  const r = await fetch(API+ruta, { ...opts, headers:{ "content-type":"application/json",
+    ...(S.tok?{Authorization:"Bearer "+S.tok}:{}) , ...(opts.headers||{}) }});
+  if(r.status===401){ const d=await r.json().catch(()=>({}));
+    S.tok=null; localStorage.removeItem("tok"); render();
+    throw new Error(d.error||"Sesión cerrada."); }
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.error||"Ocurrió un error.");
+  return d;
+}
+
+/* ============ Arranque ============ */
+async function iniciar(){
+  // Accesos directos del manifest: /?v=agregar, /?v=productos
+  const v=new URLSearchParams(location.search).get("v");
+  if(v && ["inicio","agregar","facturas","productos","suplidores"].includes(v)){
+    S.vista=v; if(v==="agregar") nuevoBorrador();
+  }
+  if(!S.tok){ render(); return; }
+  try{
+    S.me = await api("/api/me");
+    const [f,c] = await Promise.all([api("/api/facturas"), api("/api/catalogo")]);
+    S.facturas=f; S.catalogo=c;
+  }catch(e){ toast(e.message); }
+  render();
+}
+
+/* ============ Login ============ */
+let loginPaso=1, loginTel="";
+function vistaLogin(){
+  const app=document.getElementById("app"); app.innerHTML="";
+  const c=$(`<div class="center"></div>`);
+  c.appendChild($(`<h1 style="margin:0 0 4px;font-size:26px;color:${'#065f46'}">Libro de Facturas</h1>`));
+  c.appendChild($(`<p class="mut" style="margin:0 0 22px">Sepa cuánto le cuesta de verdad cada unidad que compra.</p>`));
+
+  if(loginPaso===1){
+    const card=$(`<div class="card"></div>`);
+    card.appendChild($(`<label>Su número de teléfono</label>`));
+    const inp=$(`<input type="tel" inputmode="numeric" placeholder="809 000 0000" />`);
+    card.appendChild(inp);
+    card.appendChild($(`<p class="xs mut" style="margin:8px 0 12px">Le enviaremos un código para entrar. No necesita contraseña.</p>`));
+    const b=$(`<button class="btn">Enviar código</button>`);
+    b.onclick=async()=>{ const t=inp.value.replace(/\D/g,""); if(t.length<10){toast("Escriba un número válido.");return;}
+      b.disabled=true; b.textContent="Enviando…";
+      try{ const r=await api("/api/auth/solicitar",{method:"POST",body:JSON.stringify({telefono:t})});
+        loginTel=t; loginPaso=2; render(); if(r.codigo_dev) toast("Código de prueba: "+r.codigo_dev);
+      }catch(e){ toast(e.message); b.disabled=false; b.textContent="Enviar código"; } };
+    card.appendChild(b);
+    c.appendChild(card);
+  } else {
+    const card=$(`<div class="card"></div>`);
+    card.appendChild($(`<label>Código enviado al ${esc(loginTel)}</label>`));
+    const inp=$(`<input type="tel" inputmode="numeric" maxlength="6" placeholder="000000" style="letter-spacing:.4em;text-align:center;font-size:22px" />`);
+    card.appendChild(inp);
+    const b=$(`<button class="btn" style="margin-top:12px">Entrar</button>`);
+    b.onclick=async()=>{ b.disabled=true; b.textContent="Verificando…";
+      try{ const r=await api("/api/auth/verificar",{method:"POST",body:JSON.stringify({telefono:loginTel,codigo:inp.value.trim()})});
+        S.tok=r.token; localStorage.setItem("tok",r.token); loginPaso=1; await iniciar();
+      }catch(e){ toast(e.message); b.disabled=false; b.textContent="Entrar"; } };
+    card.appendChild(b);
+    const v=$(`<button class="link" style="margin-top:12px">Cambiar número</button>`);
+    v.onclick=()=>{loginPaso=1;render();};
+    card.appendChild(v);
+    c.appendChild(card);
+    setTimeout(()=>inp.focus(),100);
+  }
+  app.appendChild(c);
+}
+
+/* ============ Layout ============ */
+function render(){
+  if(!S.tok){ vistaLogin(); return; }
+  const app=document.getElementById("app"); app.innerHTML="";
+  const T={inicio:"Libro de Facturas",agregar:"Nueva factura",facturas:"Facturas",productos:"Productos",suplidores:"Suplidores"};
+  const h=$(`<header><h1>${T[S.vista]}</h1><div class="sub"></div></header>`);
+  if(S.me){
+    const e=S.me.estado;
+    const txt = e==="prueba" ? `Prueba · ${S.me.facturas_restantes} facturas gratis restantes`
+      : e==="activa" ? `Plan ${esc(S.me.plan.nombre)} · ${S.me.facturas_restantes} facturas este mes`
+      : e==="vencida" ? "Suscripción vencida — solo lectura" : "Cuenta suspendida — solo lectura";
+    h.querySelector(".sub").textContent=txt;
+  }
+  app.appendChild(h);
+  const m=$(`<main></main>`); app.appendChild(m);
+  ({inicio:vInicio,agregar:vAgregar,facturas:vFacturas,productos:vProductos,suplidores:vSuplidores}[S.vista])(m);
+
+  const n=$(`<nav></nav>`);
+  [["inicio","⌂","Inicio"],["facturas","▤","Facturas"],["agregar","＋","Agregar"],["productos","◫","Productos"],["suplidores","★","Suplidores"]]
+    .forEach(([id,ic,lb])=>{ const b=$(`<button class="${S.vista===id?'on':''}"><div>${ic}</div>${lb}</button>`);
+      b.onclick=()=>{ S.vista=id; if(id==="agregar"&&!S.borrador) nuevoBorrador(); render(); }; n.appendChild(b); });
+  app.appendChild(n);
+}
+
+function soloLectura(){ return S.me && (S.me.estado==="vencida"||S.me.estado==="suspendida"); }
+
+/* ============ Inicio ============ */
+async function vInicio(m){
+  if(soloLectura()) m.appendChild($(`<div class="warn">Su suscripción no está al día. Puede consultar todo su historial, pero para registrar facturas nuevas debe reactivar. <b>Sus datos no se borran.</b></div>`));
+  const g=$(`<div class="grid2"></div>`);
+  ["Facturas","Suplidores","Productos","Gasto total"].forEach(l=>g.appendChild($(`<div class="stat"><div class="xs mut">${l}</div><div class="n" data-k="${l}">—</div></div>`)));
+  m.appendChild(g);
+
+  const b=$(`<button class="btn">Registrar nueva factura</button>`);
+  b.onclick=()=>{ S.vista="agregar"; if(!S.borrador) nuevoBorrador(); render(); };
+  m.appendChild(b);
+
+  m.appendChild($(`<h3 class="sm b mut" style="margin:18px 0 8px;text-transform:uppercase">Últimas facturas</h3>`));
+  if(!S.facturas.length) m.appendChild($(`<div class="card" style="text-align:center;color:#a8a29e" class="sm">Todavía no ha registrado facturas.</div>`));
+  S.facturas.slice(0,5).forEach(f=>m.appendChild(tarjetaFactura(f)));
+
+  try{ const r=await api("/api/resumen");
+    const v={"Facturas":r.facturas,"Suplidores":r.suplidores,"Productos":r.productos,"Gasto total":rd(r.gasto)};
+    g.querySelectorAll("[data-k]").forEach(e=>{ e.textContent=v[e.dataset.k];
+      if(e.dataset.k==="Gasto total") e.style.fontSize="16px"; });
+  }catch(e){}
+}
+
+function tarjetaFactura(f){
+  const c=$(`<div class="card" style="cursor:pointer"></div>`);
+  c.innerHTML=`<div style="display:flex;justify-content:space-between;gap:8px">
+    <div style="min-width:0"><div class="b sm">${esc(f.proveedor)}</div>
+      <div class="xs mut">${esc(f.fecha)}${f.ncf?" · "+esc(f.ncf):""}</div></div>
+    <div class="right"><div class="b sm">${rd(f.total)}</div>
+      ${f.deposito_envases?`<div class="xs mut">+${rd(f.deposito_envases)} envases</div>`:""}</div></div>`;
+  c.onclick=()=>verFactura(f.id);
+  return c;
+}
+
+async function verFactura(id){
+  try{
+    const f=await api("/api/facturas/"+id);
+    const m=document.querySelector("main"); m.innerHTML="";
+    const v=$(`<button class="link" style="margin-bottom:10px">‹ Volver</button>`);
+    v.onclick=()=>render(); m.appendChild(v);
+    const c=$(`<div class="card"></div>`);
+    c.appendChild($(`<div class="b">${esc(f.proveedor)}</div>`));
+    c.appendChild($(`<div class="xs mut">${esc(f.fecha)}${f.ncf?" · "+esc(f.ncf):""}</div>`));
+    c.appendChild($(`<hr class="sep">`));
+    f.renglones.forEach(r=>{
+      c.appendChild($(`<div class="item">
+        <div style="min-width:0"><div class="sm b">${esc(r.producto)}</div>
+          <div class="xs mut">${r.cantidad} ${esc(r.unidad_compra||"")} × ${rd(r.precio_unidad_compra)}${r.unidades>1?` · ${r.unidades} un.`:""}</div></div>
+        <div class="right"><div class="b sm">${rd(r.precio_por_unidad)}<span class="mut" style="font-weight:400">/un</span></div>
+          ${r.precio_por_unidad_sin!=null?`<div class="xs mut">${rd(r.precio_por_unidad_sin)} s/ITBIS</div>`:""}</div></div>`));
+    });
+    c.appendChild($(`<hr class="sep">`));
+    c.appendChild($(`<div style="display:flex;justify-content:space-between"><span class="sm b">Total</span><span class="b">${rd(f.total)}</span></div>`));
+    if(f.deposito_envases) c.appendChild($(`<div style="display:flex;justify-content:space-between;margin-top:4px"><span class="xs mut">Depósito de envases (recuperable)</span><span class="xs mut">${rd(f.deposito_envases)}</span></div>`));
+    m.appendChild(c);
+    const d=$(`<button class="btn btn2" style="color:#b91c1c">Eliminar factura</button>`);
+    d.onclick=async()=>{ if(!confirm("¿Eliminar esta factura?"))return;
+      try{ await api("/api/facturas/"+id,{method:"DELETE"}); S.facturas=await api("/api/facturas"); toast("Factura eliminada"); render(); }
+      catch(e){ toast(e.message); } };
+    m.appendChild(d);
+  }catch(e){ toast(e.message); }
+}
+
+/* ============ Agregar ============ */
+function nuevoBorrador(){ S.borrador={proveedor:"",fecha:hoy(),ncf:"",deposito:"",modo:"manual",
+  renglones:[{producto:"",cantidad:"1",unidad_compra:"Paquete",precio:"",itbis:"",unidades:"1",exento:false}]}; S.activo=null; }
+
+function presetDe(prov,prod){
+  const k=norm(prov)+"::"+norm(prod);
+  const p=S.catalogo.presentaciones.find(x=>norm(x.proveedor)+"::"+norm(x.producto)===k);
+  return p?p.unidades:null;
+}
+
+function vAgregar(m){
+  const B=S.borrador;
+  if(soloLectura()){ m.appendChild($(`<div class="err">Su suscripción no está al día, así que no puede registrar facturas nuevas. Su historial sigue disponible.</div>`)); return; }
+
+  const tabs=$(`<div class="row" style="background:#e7e5e4;border-radius:9px;padding:3px;margin-bottom:12px"></div>`);
+  [["manual","Manual"],["foto","Foto"]].forEach(([id,lb])=>{
+    const b=$(`<button class="btn" style="padding:8px;font-size:14px;${B.modo===id?"":"background:transparent;color:#78716c"}">${lb}</button>`);
+    b.onclick=()=>{B.modo=id;render();}; tabs.appendChild(b); });
+  m.appendChild(tabs);
+
+  if(B.modo==="foto"){
+    const c=$(`<div class="card"></div>`);
+    c.appendChild($(`<p class="sm mut" style="margin:0 0 10px">Suba una o varias fotos. Se procesan en el servidor y usted revisa antes de guardar.</p>`));
+    const lab=$(`<label class="drop"><input type="file" accept="image/*" multiple><div style="font-size:26px">▲</div><div class="sm b">Tomar o subir fotos</div></label>`);
+    lab.querySelector("input").onchange=(e)=>procesarFotos(e.target);
+    c.appendChild(lab);
+    S.cola.forEach(q=>{
+      const est={proc:"Procesando…",listo:`${q.datos?.renglones?.length||0} artículo(s) detectado(s)`,error:"No se pudo leer",guardado:"Guardada ✓"}[q.estado];
+      const el=$(`<div class="q"><img src="${q.prev}"><div style="flex:1;min-width:0">
+        <div class="xs b" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(q.estado==="listo"?(q.datos.proveedor||"Sin identificar"):q.nombre)}</div>
+        <div class="xs mut">${est}</div></div></div>`);
+      if(q.estado==="listo"){ const b=$(`<button class="btn btn3" style="width:auto;padding:6px 10px;font-size:12px">Revisar</button>`);
+        b.onclick=()=>{ cargarBorrador(q.datos); S.activo=q.id; B.modo="manual"; render(); }; el.appendChild(b); }
+      c.appendChild(el);
+    });
+    m.appendChild(c);
+    return;
+  }
+
+  if(S.activo) m.appendChild($(`<div class="warn">Datos extraídos de una foto. <b>Revise antes de guardar</b>, sobre todo las unidades por empaque.</div>`));
+
+  const c=$(`<div class="card"></div>`);
+  c.appendChild($(`<label>Proveedor</label>`));
+  const dl=$(`<datalist id="dprov"></datalist>`);
+  S.catalogo.proveedores.forEach(p=>dl.appendChild($(`<option value="${esc(p.nombre)}">`)));
+  const ip=$(`<input list="dprov" value="${esc(B.proveedor)}" placeholder="Escriba o elija">`);
+  ip.oninput=e=>{B.proveedor=e.target.value;}; c.appendChild(ip); c.appendChild(dl);
+  const r2=$(`<div class="row"></div>`);
+  const f1=$(`<div><label>Fecha</label><input type="date" value="${B.fecha}"></div>`);
+  f1.querySelector("input").oninput=e=>B.fecha=e.target.value;
+  const f2=$(`<div><label>NCF (opcional)</label><input value="${esc(B.ncf)}"></div>`);
+  f2.querySelector("input").oninput=e=>B.ncf=e.target.value;
+  r2.appendChild(f1); r2.appendChild(f2); c.appendChild(r2);
+  c.appendChild($(`<label>Depósito de envases (opcional)</label>`));
+  const idep=$(`<input type="number" inputmode="decimal" value="${B.deposito}" placeholder="0.00">`);
+  idep.oninput=e=>B.deposito=e.target.value; c.appendChild(idep);
+  m.appendChild(c);
+
+  B.renglones.forEach((g,i)=>m.appendChild(editorRenglon(g,i)));
+
+  const add=$(`<button class="btn btn3" style="margin-bottom:10px">+ Agregar artículo</button>`);
+  add.onclick=()=>{B.renglones.push({producto:"",cantidad:"1",unidad_compra:"Paquete",precio:"",itbis:"",unidades:"1",exento:false});render();};
+  m.appendChild(add);
+
+  const acc=$(`<div class="row"></div>`);
+  const canc=$(`<button class="btn btn2">Cancelar</button>`);
+  canc.onclick=()=>{nuevoBorrador();S.vista="inicio";render();};
+  const save=$(`<button class="btn">Guardar factura</button>`);
+  save.onclick=guardarFactura;
+  acc.appendChild(canc); acc.appendChild(save); m.appendChild(acc);
+}
+
+function editorRenglon(g,i){
+  const B=S.borrador;
+  const c=$(`<div class="card"></div>`);
+  const head=$(`<div style="display:flex;justify-content:space-between;align-items:center"><span class="xs b mut">ARTÍCULO ${i+1}</span></div>`);
+  if(B.renglones.length>1){ const x=$(`<button class="link" style="color:#a8a29e">✕</button>`);
+    x.onclick=()=>{B.renglones.splice(i,1);render();}; head.appendChild(x); }
+  c.appendChild(head);
+
+  c.appendChild($(`<label>Producto</label>`));
+  const dlid="dp"+i;
+  const dl=$(`<datalist id="${dlid}"></datalist>`);
+  S.catalogo.presentaciones.filter(p=>!B.proveedor||norm(p.proveedor)===norm(B.proveedor))
+    .forEach(p=>dl.appendChild($(`<option value="${esc(p.producto)}">`)));
+  const ip=$(`<input list="${dlid}" value="${esc(g.producto)}" placeholder="Nombre del producto">`);
+  ip.oninput=e=>g.producto=e.target.value;
+  ip.onblur=()=>{ const u=presetDe(B.proveedor,g.producto); if(u){ g.unidades=String(u); render(); } };
+  c.appendChild(ip); c.appendChild(dl);
+
+  const r1=$(`<div class="row"></div>`);
+  const q=$(`<div><label>Cantidad</label><input type="number" inputmode="decimal" value="${g.cantidad}"></div>`);
+  q.querySelector("input").oninput=e=>{g.cantidad=e.target.value;};
+  const u=$(`<div><label>Unidad de compra</label><select>${["Paquete","Caja","Saco","Fardo","Libra","Unidad","Display","Huacal"].map(x=>`<option${g.unidad_compra===x?" selected":""}>${x}</option>`).join("")}</select></div>`);
+  u.querySelector("select").onchange=e=>{g.unidad_compra=e.target.value;render();};
+  r1.appendChild(q); r1.appendChild(u); c.appendChild(r1);
+
+  c.appendChild($(`<label>Precio por ${esc((g.unidad_compra||"paquete").toLowerCase())}</label>`));
+  const ipr=$(`<input type="number" inputmode="decimal" value="${g.precio}" placeholder="0.00">`);
+  ipr.oninput=e=>{g.precio=e.target.value;actualizarCalc(c,g);}; c.appendChild(ipr);
+
+  const lx=$(`<label style="text-transform:none;display:flex;gap:7px;align-items:center;font-size:13px;font-weight:400;color:#57534e;margin-top:9px"><input type="checkbox" style="width:auto"${g.exento?" checked":""}> Producto exento de ITBIS</label>`);
+  lx.querySelector("input").onchange=e=>{g.exento=e.target.checked;render();};
+  c.appendChild(lx);
+
+  if(!g.exento){
+    c.appendChild($(`<label>ITBIS incluido en ese precio (opcional)</label>`));
+    const it=$(`<input type="number" inputmode="decimal" value="${g.itbis}" placeholder="0.00">`);
+    it.oninput=e=>{g.itbis=e.target.value;actualizarCalc(c,g);}; c.appendChild(it);
+  }
+
+  c.appendChild($(`<label>Unidades individuales por ${esc((g.unidad_compra||"paquete").toLowerCase())}</label>`));
+  const wrap=$(`<div class="row"></div>`);
+  const iu=$(`<input type="number" inputmode="numeric" value="${g.unidades}">`);
+  iu.oninput=e=>{g.unidades=e.target.value;actualizarCalc(c,g);};
+  wrap.appendChild(iu);
+  const pre=presetDe(B.proveedor,g.producto);
+  if(pre){ const b=$(`<button class="btn btn3" style="flex:0 0 auto;width:auto;padding:0 12px;font-size:12px">Usar ${pre}</button>`);
+    b.onclick=()=>{g.unidades=String(pre);render();}; wrap.appendChild(b); }
+  c.appendChild(wrap);
+  if(pre) c.appendChild($(`<div class="xs mut" style="margin-top:3px">Presentación conocida para este proveedor: ${pre} un.</div>`));
+
+  c.appendChild(bloqueCalc(g));
+  return c;
+}
+
+function calcular(g){
+  const u=Math.max(1,parseInt(g.unidades)||1), p=Number(g.precio)||0;
+  const it=g.itbis!==""&&g.itbis!=null?Number(g.itbis):null;
+  return { u, p, porUnidad:p/u, porUnidadSin: it!=null?(p-it)/u : (g.exento?p/u:null) };
+}
+function bloqueCalc(g){
+  const {u,p,porUnidad,porUnidadSin}=calcular(g);
+  const d=$(`<div class="calc"></div>`);
+  d.appendChild($(`<div><span class="xs mut">Precio por ${esc((g.unidad_compra||"paquete").toLowerCase())}</span><span class="b sm">${rd(p)}</span></div>`));
+  if(u>1) d.appendChild($(`<div><span class="xs mut">÷ ${u} un. = precio por unidad</span><span class="right"><span class="b" style="color:#065f46">${rd(porUnidad)}</span>${porUnidadSin!=null?`<div class="xs mut">${rd(porUnidadSin)} s/ITBIS</div>`:""}</span></div>`));
+  else d.appendChild($(`<div><span class="xs mut">Ya es la unidad individual</span><span class="b sm" style="color:#065f46">${rd(porUnidad)}</span></div>`));
+  return d;
+}
+function actualizarCalc(card,g){ const v=card.querySelector(".calc"); if(v) v.replaceWith(bloqueCalc(g)); }
+
+function cargarBorrador(d){
+  S.borrador={ proveedor:d.proveedor||"", fecha:d.fecha||hoy(), ncf:d.ncf||"",
+    deposito:d.deposito_envases?String(d.deposito_envases):"", modo:"manual",
+    renglones:(d.renglones||[]).map(r=>({
+      producto:r.producto||"", cantidad:r.cantidad!=null?String(r.cantidad):"1",
+      unidad_compra:r.unidad_compra||"Paquete", precio:r.precio_unidad_compra!=null?String(r.precio_unidad_compra):"",
+      itbis:r.itbis_unidad_compra!=null?String(r.itbis_unidad_compra):"",
+      unidades:String(r.unidades||presetDe(d.proveedor,r.producto)||1), exento:!!r.exento, nota:r.nota_revisar||null }))};
+  if(!S.borrador.renglones.length) S.borrador.renglones=[{producto:"",cantidad:"1",unidad_compra:"Paquete",precio:"",itbis:"",unidades:"1",exento:false}];
+}
+
+async function guardarFactura(){
+  const B=S.borrador;
+  if(!B.proveedor.trim()) return toast("Escriba el proveedor.");
+  if(!B.fecha) return toast("Elija la fecha.");
+  for(const g of B.renglones){
+    if(!g.producto.trim()) return toast("Cada artículo necesita un nombre.");
+    if(!(Number(g.precio)>0)) return toast(`Falta el precio de "${g.producto}".`);
+  }
+  try{
+    await api("/api/facturas",{method:"POST",body:JSON.stringify({
+      proveedor:B.proveedor.trim(), fecha:B.fecha, ncf:B.ncf.trim()||null,
+      deposito_envases:Number(B.deposito)||0, origen:S.activo?"foto":"manual",
+      renglones:B.renglones.map(g=>({ producto:g.producto.trim(), cantidad:Number(g.cantidad)||1,
+        unidad_compra:g.unidad_compra, precio_unidad_compra:Number(g.precio)||0,
+        itbis_unidad_compra:g.itbis!==""?Number(g.itbis):null,
+        unidades:Math.max(1,parseInt(g.unidades)||1), exento:!!g.exento }))}));
+
+    if(S.activo){ const q=S.cola.find(x=>x.id===S.activo); if(q) q.estado="guardado"; }
+    const sig=S.cola.find(q=>q.estado==="listo");
+    S.facturas=await api("/api/facturas"); S.me=await api("/api/me"); S.catalogo=await api("/api/catalogo");
+
+    if(sig){ cargarBorrador(sig.datos); S.activo=sig.id; toast("Guardada. Mostrando la siguiente."); render(); }
+    else{ nuevoBorrador(); S.vista="facturas"; toast("Factura guardada"); render(); }
+  }catch(e){ toast(e.message); }
+}
+
+async function procesarFotos(input){
+  const files=[...(input.files||[])]; if(!files.length) return;
+  for(const f of files){
+    const id=Math.random().toString(36).slice(2);
+    const prev=await new Promise(res=>{const r=new FileReader();r.onload=()=>res(r.result);r.readAsDataURL(f);});
+    S.cola.push({id,nombre:f.name,prev,estado:"proc"}); render();
+    try{
+      const datos=await api("/api/facturas/extraer",{method:"POST",
+        body:JSON.stringify({imagen_base64:prev.split(",")[1],media_type:f.type||"image/jpeg"})});
+      const q=S.cola.find(x=>x.id===id); q.estado="listo"; q.datos=datos;
+    }catch(e){ const q=S.cola.find(x=>x.id===id); q.estado="error"; toast(e.message); }
+    render();
+  }
+  try{ input.value=""; }catch(e){}
+}
+
+/* ============ Facturas ============ */
+function vFacturas(m){
+  if(!S.facturas.length){ m.appendChild($(`<div class="card sm mut" style="text-align:center">No hay facturas registradas.</div>`)); return; }
+  const b=$(`<input placeholder="Buscar por proveedor…" style="margin-bottom:10px">`);
+  const cont=$(`<div></div>`);
+  const pinta=(q="")=>{ cont.innerHTML="";
+    S.facturas.filter(f=>norm(f.proveedor).includes(norm(q))).forEach(f=>cont.appendChild(tarjetaFactura(f))); };
+  b.oninput=e=>pinta(e.target.value); m.appendChild(b); m.appendChild(cont); pinta();
+}
+
+/* ============ Productos ============ */
+async function vProductos(m){
+  m.appendChild($(`<div class="sm mut">Cargando…</div>`));
+  try{
+    const p=await api("/api/productos"); m.innerHTML="";
+    if(!p.length){ m.appendChild($(`<div class="card sm mut" style="text-align:center">Registre facturas para comparar precios.</div>`)); return; }
+    const b=$(`<input placeholder="Buscar producto…" style="margin-bottom:10px">`);
+    const cont=$(`<div></div>`);
+    const pinta=(q="")=>{ cont.innerHTML="";
+      p.filter(x=>norm(x.producto).includes(norm(q))).forEach(x=>{
+        const c=$(`<div class="card" style="cursor:pointer;display:flex;justify-content:space-between;gap:8px">
+          <div style="min-width:0"><div class="sm b">${esc(x.producto)}</div>
+            <div class="xs mut">${x.suplidores} suplidor${x.suplidores>1?"es":""} · ${x.compras} compra${x.compras>1?"s":""}</div></div>
+          <div class="right"><div class="sm b">${x.maximo>x.minimo?rd(x.minimo)+" – "+rd(x.maximo):rd(x.minimo)}</div>
+            ${x.mejor_proveedor?`<div class="xs" style="color:#047857;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px">mejor: ${esc(x.mejor_proveedor)}</div>`:""}</div></div>`);
+        c.onclick=()=>verProducto(x.producto); cont.appendChild(c); }); };
+    b.oninput=e=>pinta(e.target.value); m.appendChild(b); m.appendChild(cont); pinta();
+  }catch(e){ m.innerHTML=""; m.appendChild($(`<div class="err">${esc(e.message)}</div>`)); }
+}
+
+async function verProducto(prod){
+  const m=document.querySelector("main"); m.innerHTML="";
+  const v=$(`<button class="link" style="margin-bottom:10px">‹ Volver</button>`); v.onclick=()=>render(); m.appendChild(v);
+  m.appendChild($(`<h3 style="margin:0 0 10px">${esc(prod)}</h3>`));
+  try{
+    const filas=await api("/api/comparar?producto="+encodeURIComponent(prod));
+    const min=Math.min(...filas.map(f=>f.precio_por_unidad));
+    filas.slice().sort((a,b)=>a.precio_por_unidad-b.precio_por_unidad).forEach(f=>{
+      const mejor=f.precio_por_unidad===min;
+      m.appendChild($(`<div class="card" style="${mejor?"border-color:#f59e0b":""};display:flex;justify-content:space-between;gap:8px">
+        <div style="min-width:0"><div class="sm b">${esc(f.proveedor)}</div>
+          <div class="xs mut">${esc(f.fecha)} · ${rd(f.precio_unidad_compra)} ÷ ${f.unidades} un.</div></div>
+        <div class="right"><div class="b">${rd(f.precio_por_unidad)}</div>
+          ${mejor&&filas.length>1?`<span class="pill w">mejor precio</span>`:
+            (min>0?`<div class="xs mut">+${((f.precio_por_unidad/min-1)*100).toFixed(0)}%</div>`:"")}</div></div>`));
+    });
+    if(new Set(filas.map(f=>f.proveedor)).size<2)
+      m.appendChild($(`<div class="sm mut" style="text-align:center;margin-top:8px">Solo un suplidor registrado — sin comparación todavía.</div>`));
+  }catch(e){ m.appendChild($(`<div class="err">${esc(e.message)}</div>`)); }
+}
+
+/* ============ Suplidores ============ */
+async function vSuplidores(m){
+  m.appendChild($(`<div class="sm mut">Cargando…</div>`));
+  try{
+    const d=await api("/api/suplidores"); m.innerHTML="";
+    if(!d.suplidores.length){ m.appendChild($(`<div class="card sm mut" style="text-align:center">Registre facturas de al menos dos suplidores para ver el ranking.</div>`)); return; }
+
+    if(d.oportunidades.length){
+      m.appendChild($(`<h3 class="sm b mut" style="margin:0 0 8px;text-transform:uppercase">Dónde está pagando de más</h3>`));
+      d.oportunidades.slice(0,5).forEach(o=>{
+        m.appendChild($(`<div class="card" style="border-color:#fcd34d">
+          <div class="sm b">${esc(o.producto)}</div>
+          <div class="xs mut" style="margin-top:4px">${esc(o.proveedor_caro)}: ${rd(o.precio_caro)}/un</div>
+          <div class="xs" style="color:#047857">${esc(o.proveedor_barato)}: ${rd(o.precio_barato)}/un ◄</div>
+          <div class="sm b" style="margin-top:6px">Ahorro: ${rd(o.ahorro_unidad)}/unidad · ~${rd(o.ahorro_compra)} por compra</div></div>`));
+      });
+    }
+
+    m.appendChild($(`<h3 class="sm b mut" style="margin:16px 0 8px;text-transform:uppercase">Ranking y participación</h3>`));
+    d.suplidores.forEach((s,i)=>{
+      const top=i===0&&s.score!=null;
+      const c=$(`<div class="card" style="${top?"border-color:#f59e0b":""}"></div>`);
+      c.appendChild($(`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div class="sm b" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.score!=null?(i+1)+". ":""}${esc(s.proveedor)}</div>
+        ${top?'<span class="pill w">mejor suplidor</span>':""}</div>`));
+      if(s.score!=null) c.appendChild($(`<div class="xs" style="margin:5px 0;color:${s.sobreprecio_pct<0.5?"#047857":"#57534e"}">
+        ${s.sobreprecio_pct<0.5?"El más competitivo en promedio":s.sobreprecio_pct.toFixed(0)+"% más caro que el mejor precio"}
+        · ganó en ${s.ganados}/${s.comparados}</div>`));
+      else c.appendChild($(`<div class="xs mut" style="margin:5px 0">Sin productos comparables con otros suplidores</div>`));
+      c.appendChild($(`<div class="xs mut" style="display:flex;justify-content:space-between"><span>Productos que le compra (${s.productos})</span><span class="b">${s.pct_productos.toFixed(0)}%</span></div>
+        <div class="bar"><i style="width:${Math.min(100,s.pct_productos)}%"></i></div>`));
+      c.appendChild($(`<div class="xs mut" style="display:flex;justify-content:space-between;margin-top:6px"><span>Participación en su gasto</span><span class="b">${s.pct_gasto.toFixed(0)}% · ${rd(s.gasto)}</span></div>
+        <div class="bar"><i style="width:${Math.min(100,s.pct_gasto)}%"></i></div>`));
+      m.appendChild(c);
+    });
+
+    const out=$(`<button class="btn btn2" style="margin-top:16px">Cerrar sesión</button>`);
+    out.onclick=async()=>{ try{await api("/api/auth/salir",{method:"POST"});}catch(e){}
+      S.tok=null; localStorage.removeItem("tok"); S.facturas=[]; S.me=null; render(); };
+    m.appendChild(out);
+  }catch(e){ m.innerHTML=""; m.appendChild($(`<div class="err">${esc(e.message)}</div>`)); }
+}
+
+if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(()=>{});
+iniciar();
+</script>
+</body>
+</html>

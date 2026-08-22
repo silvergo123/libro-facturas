@@ -1,0 +1,31 @@
+{
+  "id": "/",
+  "name": "Libro de Facturas",
+  "short_name": "Facturas",
+  "description": "Registre sus facturas y sepa cuánto le cuesta de verdad cada unidad que compra, y cuál de sus proveedores se la vende más barata.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "portrait",
+  "background_color": "#f5f5f4",
+  "theme_color": "#065f46",
+  "lang": "es-DO",
+  "dir": "ltr",
+  "categories": ["business", "finance", "productivity"],
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    { "src": "captura-1.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow", "label": "Resumen de facturas y gasto" },
+    { "src": "captura-2.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow", "label": "Comparación de precios entre proveedores" }
+  ],
+  "shortcuts": [
+    { "name": "Registrar factura", "short_name": "Agregar", "description": "Registrar una factura nueva", "url": "/?v=agregar", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "Comparar precios", "short_name": "Productos", "description": "Ver qué proveedor vende más barato", "url": "/?v=productos", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] }
+  ]
+}
