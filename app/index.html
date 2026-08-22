@@ -187,7 +187,7 @@ async function vInicio(m){
   m.appendChild(b);
 
   m.appendChild($(`<h3 class="sm b mut" style="margin:18px 0 8px;text-transform:uppercase">Últimas facturas</h3>`));
-  if(!S.facturas.length) m.appendChild($(`<div class="card" style="text-align:center;color:#a8a29e" class="sm">Todavía no ha registrado facturas.</div>`));
+  if(!S.facturas.length) m.appendChild($(`<div class="card sm" style="text-align:center;color:#a8a29e">Todavía no ha registrado facturas.</div>`));
   S.facturas.slice(0,5).forEach(f=>m.appendChild(tarjetaFactura(f)));
 
   try{ const r=await api("/api/resumen");
@@ -404,7 +404,7 @@ async function guardarFactura(){
       renglones:B.renglones.map(g=>({ producto:g.producto.trim(), cantidad:Number(g.cantidad)||1,
         unidad_compra:g.unidad_compra, precio_unidad_compra:Number(g.precio)||0,
         itbis_unidad_compra:g.itbis!==""?Number(g.itbis):null,
-        unidades:Math.max(1,parseInt(g.unidades)||1), exento:!!g.exento }))}));
+        unidades:Math.max(1,parseInt(g.unidades)||1), exento:!!g.exento }))})});
 
     if(S.activo){ const q=S.cola.find(x=>x.id===S.activo); if(q) q.estado="guardado"; }
     const sig=S.cola.find(q=>q.estado==="listo");
@@ -511,10 +511,10 @@ async function vSuplidores(m){
         ${s.sobreprecio_pct<0.5?"El más competitivo en promedio":s.sobreprecio_pct.toFixed(0)+"% más caro que el mejor precio"}
         · ganó en ${s.ganados}/${s.comparados}</div>`));
       else c.appendChild($(`<div class="xs mut" style="margin:5px 0">Sin productos comparables con otros suplidores</div>`));
-      c.appendChild($(`<div class="xs mut" style="display:flex;justify-content:space-between"><span>Productos que le compra (${s.productos})</span><span class="b">${s.pct_productos.toFixed(0)}%</span></div>
-        <div class="bar"><i style="width:${Math.min(100,s.pct_productos)}%"></i></div>`));
-      c.appendChild($(`<div class="xs mut" style="display:flex;justify-content:space-between;margin-top:6px"><span>Participación en su gasto</span><span class="b">${s.pct_gasto.toFixed(0)}% · ${rd(s.gasto)}</span></div>
-        <div class="bar"><i style="width:${Math.min(100,s.pct_gasto)}%"></i></div>`));
+      c.appendChild($(`<div><div class="xs mut" style="display:flex;justify-content:space-between"><span>Productos que le compra (${s.productos})</span><span class="b">${s.pct_productos.toFixed(0)}%</span></div>
+        <div class="bar"><i style="width:${Math.min(100,s.pct_productos)}%"></i></div></div>`));
+      c.appendChild($(`<div><div class="xs mut" style="display:flex;justify-content:space-between;margin-top:6px"><span>Participación en su gasto</span><span class="b">${s.pct_gasto.toFixed(0)}% · ${rd(s.gasto)}</span></div>
+        <div class="bar"><i style="width:${Math.min(100,s.pct_gasto)}%"></i></div></div>`));
       m.appendChild(c);
     });
 
@@ -525,8 +525,15 @@ async function vSuplidores(m){
   }catch(e){ m.innerHTML=""; m.appendChild($(`<div class="err">${esc(e.message)}</div>`)); }
 }
 
-if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(()=>{});
 iniciar();
+
+// El registro va al final y protegido: en orígenes sin HTTPS (por ejemplo,
+// al probar por IP local) navigator.serviceWorker existe pero vale undefined,
+// y llamarlo lanzaba un error que detenía toda la app en "Cargando…".
+try {
+  if (navigator.serviceWorker && location.protocol === "https:")
+    navigator.serviceWorker.register("./sw.js").catch(()=>{});
+} catch (e) { /* sin service worker: la app funciona igual, solo sin modo offline */ }
 </script>
 </body>
 </html>
