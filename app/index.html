@@ -108,7 +108,7 @@ async function iniciar(){
 }
 
 /* ============ Login ============ */
-let loginPaso=1, loginTel="";
+let loginPaso=1, loginTel="", loginCodigoDev=null;
 function vistaLogin(){
   const app=document.getElementById("app"); app.innerHTML="";
   const c=$(`<div class="center"></div>`);
@@ -125,12 +125,21 @@ function vistaLogin(){
     b.onclick=async()=>{ const t=inp.value.replace(/\D/g,""); if(t.length<10){toast("Escriba un número válido.");return;}
       b.disabled=true; b.textContent="Enviando…";
       try{ const r=await api("/api/auth/solicitar",{method:"POST",body:JSON.stringify({telefono:t})});
-        loginTel=t; loginPaso=2; render(); if(r.codigo_dev) toast("Código de prueba: "+r.codigo_dev);
+        loginTel=t; loginCodigoDev=r.codigo_dev||null; loginPaso=2; render();
       }catch(e){ toast(e.message); b.disabled=false; b.textContent="Enviar código"; } };
     card.appendChild(b);
     c.appendChild(card);
   } else {
     const card=$(`<div class="card"></div>`);
+    if(loginCodigoDev){
+      card.appendChild($(`<div style="background:#d1fae5;border-radius:9px;padding:12px;text-align:center;margin-bottom:12px">
+        <div class="xs" style="color:#065f46">Su código de acceso</div>
+        <div style="font-size:30px;font-weight:700;letter-spacing:.18em;color:#065f46;font-family:ui-monospace,Menlo,monospace">${esc(loginCodigoDev)}</div>
+        <div class="xs" style="color:#047857">Escríbalo abajo. Vence en 10 minutos.</div></div>`));
+    } else {
+      card.appendChild($(`<div style="background:#fef3c7;border-radius:9px;padding:10px;margin-bottom:12px;font-size:12px;color:#92400e">
+        Le enviamos un código a su teléfono. Si no le llega, pídale al administrador que lo consulte en el panel.</div>`));
+    }
     card.appendChild($(`<label>Código enviado al ${esc(loginTel)}</label>`));
     const inp=$(`<input type="tel" inputmode="numeric" maxlength="6" placeholder="000000" style="letter-spacing:.4em;text-align:center;font-size:22px" />`);
     card.appendChild(inp);

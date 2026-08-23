@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Administrador — Libro de Facturas</title>
+<style>
+:root{--v:#065f46;--v2:#047857;--pi:#e7e5e4;--gr:#78716c;--bg:#f5f5f4}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:#1c1917;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px}
+.wrap{max-width:1000px;margin:0 auto;padding:0 16px 60px}
+header{background:var(--v);color:#fff;padding:16px}
+header .wrap{padding-bottom:0}
+h1{margin:0;font-size:19px}
+h2{font-size:14px;text-transform:uppercase;letter-spacing:.04em;color:var(--gr);margin:26px 0 10px}
+.card{background:#fff;border:1px solid var(--pi);border-radius:10px;padding:14px;margin-bottom:12px}
+label{display:block;font-size:11px;font-weight:600;color:var(--gr);text-transform:uppercase;margin:8px 0 3px}
+input,select{width:100%;padding:9px;border:1px solid #d6d3d1;border-radius:7px;font-size:14px;font-family:inherit}
+button{background:var(--v2);color:#fff;border:0;border-radius:7px;padding:10px 14px;font-weight:600;cursor:pointer;font-family:inherit;font-size:14px}
+button.sec{background:#fff;color:var(--gr);border:1px solid #d6d3d1}
+button.mini{padding:5px 9px;font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--gr);font-size:11px;text-transform:uppercase;padding:6px;border-bottom:2px solid var(--pi)}
+td{padding:8px 6px;border-bottom:1px solid #f0efee;vertical-align:top}
+.pill{display:inline-block;border-radius:99px;padding:2px 9px;font-size:11px;font-weight:600}
+.p-activa{background:#d1fae5;color:#065f46}.p-prueba{background:#dbeafe;color:#1e40af}
+.p-vencida{background:#fef3c7;color:#92400e}.p-suspendida{background:#fee2e2;color:#991b1b}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.stat{background:#fff;border:1px solid var(--pi);border-radius:10px;padding:11px}
+.stat .n{font-size:22px;font-weight:700}
+.stat .l{font-size:11px;color:var(--gr);text-transform:uppercase}
+.mut{color:var(--gr)}.sm{font-size:12px}.b{font-weight:700}
+.code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:20px;font-weight:700;letter-spacing:.15em;color:var(--v)}
+.row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.row>div{flex:1;min-width:120px}
+.warn{background:#fef3c7;color:#92400e;border-radius:8px;padding:10px;font-size:13px;margin-bottom:12px}
+.err{background:#fee2e2;color:#991b1b;border-radius:8px;padding:10px;font-size:13px;margin-bottom:12px}
+.ok{background:#d1fae5;color:#065f46;border-radius:8px;padding:10px;font-size:13px;margin-bottom:12px}
+.login{max-width:400px;margin:70px auto}
+</style>
+</head>
+<body>
+<div id="raiz"></div>
+<script>
+const $=(h)=>{const d=document.createElement("div");d.innerHTML=h.trim();return d.firstChild;};
+const esc=(s)=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const rd=(n)=>"RD$"+(Number(n)||0).toLocaleString("es-DO",{minimumFractionDigits:2,maximumFractionDigits:2});
+let TOKEN = sessionStorage.getItem("admtok") || "";
+let planes = [];
+
+async function api(ruta, opts={}){
+  const r = await fetch(ruta, {...opts, headers:{"content-type":"application/json","x-admin-token":TOKEN, ...(opts.headers||{})}});
+  if(r.status===403){ TOKEN=""; sessionStorage.removeItem("admtok"); pantallaLogin("Código de administrador incorrecto."); throw new Error("403"); }
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.error||"Error");
+  return d;
+}
+
+function pantallaLogin(msg){
+  const raiz=document.getElementById("raiz"); raiz.innerHTML="";
+  const c=$(`<div class="wrap"><div class="login">
+    <h1 style="color:#065f46;margin-bottom:6px">Panel de administrador</h1>
+    <p class="mut sm" style="margin-top:0">Libro de Facturas</p>
+    ${msg?`<div class="err">${esc(msg)}</div>`:""}
+    <div class="card">
+      <label>Código de administrador</label>
+      <input type="password" id="tk" placeholder="Su ADMIN_TOKEN">
+      <button style="width:100%;margin-top:12px" id="ent">Entrar</button>
+      <p class="mut sm" style="margin-bottom:0">Es el valor que puso en la variable <b>ADMIN_TOKEN</b> del servidor.</p>
+    </div></div></div>`);
+  raiz.appendChild(c);
+  const inp=c.querySelector("#tk");
+  const ir=async()=>{ TOKEN=inp.value.trim(); if(!TOKEN) return;
+    try{ await api("/api/admin/resumen"); sessionStorage.setItem("admtok",TOKEN); panel(); }catch(e){} };
+  c.querySelector("#ent").onclick=ir;
+  inp.onkeydown=e=>{ if(e.key==="Enter") ir(); };
+  inp.focus();
+}
+
+async function panel(){
+  const raiz=document.getElementById("raiz"); raiz.innerHTML="";
+  raiz.appendChild($(`<header><div class="wrap"><h1>Panel de administrador</h1></div></header>`));
+  const w=$(`<div class="wrap"></div>`); raiz.appendChild(w);
+
+  try{ planes = await api("/api/planes"); }catch(e){}
+
+  // ---- Resumen ----
+  const r = await api("/api/admin/resumen");
+  if(r.envio_codigos!=="requiere WhatsApp/SMS")
+    w.appendChild($(`<div class="warn"><b>Los códigos de acceso se muestran en pantalla.</b> Está bien mientras usted sea el único usuario, pero cualquiera podría entrar con el número de otra persona. Antes de dar acceso a terceros, conecte el envío por WhatsApp y quite <code>MOSTRAR_CODIGO</code>.</div>`));
+
+  w.appendChild($(`<h2>Resumen</h2>`));
+  const g=$(`<div class="grid"></div>`);
+  [["Cuentas",r.cuentas],["Activas",r.activas],["En prueba",r.prueba],["Vencidas",r.vencidas],
+   ["Facturas",r.facturas],["Fotos este mes",r.ocr_mes],["Ingreso del mes",rd(r.ingreso_mes)]]
+   .forEach(([l,v])=>g.appendChild($(`<div class="stat"><div class="n" style="${String(v).length>7?'font-size:15px':''}">${esc(v)}</div><div class="l">${l}</div></div>`)));
+  w.appendChild(g);
+  w.appendChild($(`<p class="sm mut">Envío de códigos: <b>${esc(r.envio_codigos)}</b> · Código maestro: <b>${esc(r.codigo_maestro)}</b></p>`));
+
+  // ---- Códigos pendientes ----
+  w.appendChild($(`<h2>Códigos de acceso pendientes</h2>`));
+  const cc=$(`<div class="card"></div>`);
+  cc.appendChild($(`<p class="sm mut" style="margin-top:0">Si alguien pidió un código y no le llegó, aquí puede verlo y dictárselo.</p>`));
+  const cl=$(`<div></div>`); cc.appendChild(cl);
+  const br=$(`<button class="sec mini">Actualizar</button>`);
+  br.onclick=()=>cargarCodigos(cl); cc.appendChild(br);
+  w.appendChild(cc); cargarCodigos(cl);
+
+  // ---- Cuentas ----
+  w.appendChild($(`<h2>Cuentas</h2>`));
+  const tc=$(`<div class="card" style="overflow-x:auto"></div>`); w.appendChild(tc);
+  await cargarCuentas(tc);
+}
+
+async function cargarCodigos(cont){
+  cont.innerHTML="<p class='sm mut'>Cargando…</p>";
+  try{
+    const cs=await api("/api/admin/codigos");
+    cont.innerHTML="";
+    if(!cs.length){ cont.appendChild($(`<p class="sm mut">No hay códigos pendientes. Pida uno desde la app y actualice.</p>`)); return; }
+    cs.forEach(c=>cont.appendChild($(`<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #f0efee">
+      <div><div class="b">${esc(c.telefono)}</div>
+        <div class="sm mut">${c.vencido?"Vencido — pida uno nuevo":`Vence en ${c.minutos_restantes} min`}${c.intentos?` · ${c.intentos} intento(s) fallido(s)`:""}</div></div>
+      <div class="code">${esc(c.codigo)}</div></div>`)));
+  }catch(e){ cont.innerHTML=`<p class="sm" style="color:#991b1b">${esc(e.message)}</p>`; }
+}
+
+async function cargarCuentas(cont){
+  cont.innerHTML="<p class='sm mut'>Cargando…</p>";
+  const cs=await api("/api/admin/cuentas");
+  cont.innerHTML="";
+  if(!cs.length){ cont.appendChild($(`<p class="sm mut">Todavía no hay cuentas registradas.</p>`)); return; }
+
+  const t=$(`<table><thead><tr>
+    <th>ID</th><th>Negocio / Teléfono</th><th>Plan</th><th>Estado</th><th>Vence</th>
+    <th>Facturas</th><th>Fotos</th><th>Acciones</th></tr></thead><tbody></tbody></table>`);
+  const tb=t.querySelector("tbody");
+
+  cs.forEach(c=>{
+    const tr=$(`<tr>
+      <td class="b">${c.id}</td>
+      <td>${esc(c.nombre_negocio||"—")}<div class="sm mut">${c.usuarios.map(u=>esc(u.telefono)+(u.conectado?" ●":"")).join("<br>")}</div></td>
+      <td>${esc(c.plan_id)}</td>
+      <td><span class="pill p-${esc(c.estado_real)}">${esc(c.estado_real)}</span></td>
+      <td class="sm">${esc(c.periodo_fin||"—")}</td>
+      <td>${c.facturas_total}<div class="sm mut">${c.facturas_mes} este mes</div></td>
+      <td>${c.ocr_usados}</td>
+      <td></td></tr>`);
+    const acc=tr.lastElementChild;
+
+    const bp=$(`<button class="mini">Plan / Pago</button>`);
+    bp.onclick=()=>formularioCuenta(c, cont);
+    acc.appendChild(bp);
+
+    if(c.usuarios.some(u=>u.conectado)){
+      const bs=$(`<button class="sec mini" style="margin-top:5px">Cerrar sesión</button>`);
+      bs.onclick=async()=>{ if(!confirm(`¿Cerrar la sesión de la cuenta ${c.id}? Tendrá que entrar de nuevo.`))return;
+        await api("/api/admin/cerrar-sesion",{method:"POST",body:JSON.stringify({cuenta_id:c.id})});
+        cargarCuentas(cont); };
+      acc.appendChild(bs);
+    }
+    tb.appendChild(tr);
+  });
+  cont.appendChild(t);
+  cont.appendChild($(`<p class="sm mut" style="margin-bottom:0">● indica sesión abierta ahora mismo.</p>`));
+}
+
+function formularioCuenta(c, cont){
+  const prev=document.getElementById("formCuenta"); if(prev) prev.remove();
+  const f=$(`<div class="card" id="formCuenta" style="border-color:#6ee7b7">
+    <div class="b" style="margin-bottom:8px">Cuenta ${c.id} — ${esc(c.nombre_negocio||c.usuarios[0]?.telefono||"")}</div>
+    <div class="row">
+      <div><label>Plan</label><select id="pl">${planes.map(p=>`<option value="${esc(p.id)}"${p.id===c.plan_id?" selected":""}>${esc(p.nombre)} — ${rd(p.precio)}/mes</option>`).join("")}</select></div>
+      <div><label>Meses</label><input type="number" id="me" value="1" min="1"></div>
+      <div><label>Monto cobrado</label><input type="number" id="mo" placeholder="0.00"></div>
+      <div><label>Método</label><select id="mt"><option>efectivo</option><option>transferencia</option><option>tarjeta</option></select></div>
+      <div><label>Referencia</label><input id="rf" placeholder="opcional"></div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <button id="bp">Registrar pago y activar</button>
+      <button class="sec" id="bs">Solo cambiar plan (sin cobro)</button>
+      <button class="sec" id="bx">Cerrar</button>
+    </div>
+    <div id="msg"></div></div>`);
+
+  const msg=(t,ok)=>{ f.querySelector("#msg").innerHTML=`<div class="${ok?'ok':'err'}" style="margin:10px 0 0">${esc(t)}</div>`; };
+
+  f.querySelector("#bp").onclick=async()=>{
+    try{ const r=await api("/api/admin/pago",{method:"POST",body:JSON.stringify({
+        cuenta_id:c.id, plan_id:f.querySelector("#pl").value, meses:f.querySelector("#me").value,
+        monto:f.querySelector("#mo").value, metodo:f.querySelector("#mt").value, referencia:f.querySelector("#rf").value })});
+      msg("Pago registrado. Vence el "+r.periodo_fin, true); cargarCuentas(cont);
+    }catch(e){ msg(e.message); } };
+
+  f.querySelector("#bs").onclick=async()=>{
+    try{ const r=await api("/api/admin/plan",{method:"POST",body:JSON.stringify({
+        cuenta_id:c.id, plan_id:f.querySelector("#pl").value, meses:f.querySelector("#me").value })});
+      msg("Plan cambiado a "+r.plan+(r.periodo_fin?" — vence el "+r.periodo_fin:""), true); cargarCuentas(cont);
+    }catch(e){ msg(e.message); } };
+
+  f.querySelector("#bx").onclick=()=>f.remove();
+  cont.parentNode.insertBefore(f, cont.nextSibling);
+  f.scrollIntoView({behavior:"smooth",block:"center"});
+}
+
+if(TOKEN){ api("/api/admin/resumen").then(panel).catch(()=>pantallaLogin()); }
+else pantallaLogin();
+</script>
+</body>
+</html>

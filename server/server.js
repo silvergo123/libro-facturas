@@ -100,22 +100,33 @@ app.post("/api/auth/solicitar", (req, res) => {
   ).run(telefono, codigo, Date.now() + 10 * 60 * 1000);
 
   // PRODUCCIÓN: enviar por WhatsApp Business API / SMS.
-  // En desarrollo se devuelve para poder probar sin proveedor de mensajería.
   console.log(`[OTP] ${telefono} → ${codigo}`);
-  res.json({ ok: true, ...(DEV ? { codigo_dev: codigo } : {}) });
+
+  // Se muestra en pantalla si está en desarrollo o si se activa MOSTRAR_CODIGO.
+  // Úselo solo mientras usted sea el único usuario.
+  const mostrar = DEV || process.env.MOSTRAR_CODIGO === "true";
+  res.json({ ok: true, ...(mostrar ? { codigo_dev: codigo } : {}) });
 });
 
 app.post("/api/auth/verificar", (req, res) => {
   const telefono = (req.body.telefono || "").replace(/\D/g, "");
   const codigo = (req.body.codigo || "").trim();
 
-  const fila = db.prepare("SELECT * FROM codigos_otp WHERE telefono=?").get(telefono);
-  if (!fila) return res.status(400).json({ error: "Solicite un código primero." });
-  if (Date.now() > fila.expira_en) return res.status(400).json({ error: "El código venció. Solicite uno nuevo." });
-  if (fila.intentos >= 5) return res.status(429).json({ error: "Demasiados intentos. Solicite un código nuevo." });
-  if (fila.codigo !== codigo) {
-    db.prepare("UPDATE codigos_otp SET intentos=intentos+1 WHERE telefono=?").run(telefono);
-    return res.status(400).json({ error: "Código incorrecto." });
+  // Código maestro: le permite entrar siempre, mientras no esté conectado el
+  // envío por WhatsApp. Defínalo con la variable CODIGO_MAESTRO.
+  // ⚠️ Quítelo en cuanto le dé acceso a otra persona.
+  const maestro = process.env.CODIGO_MAESTRO;
+  const esMaestro = maestro && codigo === maestro;
+
+  if (!esMaestro) {
+    const fila = db.prepare("SELECT * FROM codigos_otp WHERE telefono=?").get(telefono);
+    if (!fila) return res.status(400).json({ error: "Solicite un código primero." });
+    if (Date.now() > fila.expira_en) return res.status(400).json({ error: "El código venció. Solicite uno nuevo." });
+    if (fila.intentos >= 5) return res.status(429).json({ error: "Demasiados intentos. Solicite un código nuevo." });
+    if (fila.codigo !== codigo) {
+      db.prepare("UPDATE codigos_otp SET intentos=intentos+1 WHERE telefono=?").run(telefono);
+      return res.status(400).json({ error: "Código incorrecto." });
+    }
   }
   db.prepare("DELETE FROM codigos_otp WHERE telefono=?").run(telefono);
 
@@ -462,11 +473,70 @@ function admin(req, res, next) {
 
 app.get("/api/admin/cuentas", admin, (req, res) => {
   const filas = db.prepare("SELECT * FROM cuentas ORDER BY creado_en DESC").all();
-  res.json(filas.map((c) => ({
-    ...c,
-    estado_real: estadoCuenta(c),
-    facturas_mes: facturasEsteMes(c.id),
+  res.json(filas.map((c) => {
+    const u = db.prepare("SELECT telefono, rol, ultimo_acceso, session_id FROM usuarios WHERE cuenta_id=?").all(c.id);
+    return {
+      ...c,
+      estado_real: estadoCuenta(c),
+      facturas_mes: facturasEsteMes(c.id),
+      facturas_total: db.prepare("SELECT COUNT(*) c FROM facturas WHERE cuenta_id=?").get(c.id).c,
+      ocr_usados: db.prepare("SELECT COUNT(*) c FROM consumo WHERE cuenta_id=? AND tipo='ocr'").get(c.id).c,
+      usuarios: u.map((x) => ({ telefono: x.telefono, rol: x.rol, ultimo_acceso: x.ultimo_acceso, conectado: !!x.session_id })),
+    };
+  }));
+});
+
+/** Códigos de acceso pendientes — resuelve el caso de "no me llegó el código". */
+app.get("/api/admin/codigos", admin, (req, res) => {
+  const filas = db.prepare("SELECT telefono, codigo, expira_en, intentos FROM codigos_otp").all();
+  res.json(filas.map((f) => ({
+    telefono: f.telefono,
+    codigo: f.codigo,
+    intentos: f.intentos,
+    vencido: Date.now() > f.expira_en,
+    minutos_restantes: Math.max(0, Math.round((f.expira_en - Date.now()) / 60000)),
   })));
+});
+
+/** Cambiar de plan sin registrar un pago (para pruebas o cortesías). */
+app.post("/api/admin/plan", admin, (req, res) => {
+  const { cuenta_id, plan_id, meses } = req.body;
+  const cuenta = db.prepare("SELECT * FROM cuentas WHERE id=?").get(cuenta_id);
+  if (!cuenta) return res.status(404).json({ error: "Cuenta no encontrada." });
+  const plan = db.prepare("SELECT * FROM planes WHERE id=?").get(plan_id);
+  if (!plan) return res.status(400).json({ error: "Plan inválido." });
+
+  if (plan_id === "prueba") {
+    db.prepare("UPDATE cuentas SET plan_id='prueba', estado='prueba', periodo_fin=NULL WHERE id=?").run(cuenta_id);
+    return res.json({ ok: true, plan: "prueba" });
+  }
+  let fin = cuenta.periodo_fin && cuenta.periodo_fin > hoy() ? cuenta.periodo_fin : hoy();
+  for (let i = 0; i < (parseInt(meses) || 1); i++) fin = sumarMes(fin);
+  db.prepare("UPDATE cuentas SET plan_id=?, periodo_fin=?, estado='activa' WHERE id=?").run(plan_id, fin, cuenta_id);
+  res.json({ ok: true, plan: plan_id, periodo_fin: fin });
+});
+
+/** Cerrar la sesión activa de una cuenta (soporte). */
+app.post("/api/admin/cerrar-sesion", admin, (req, res) => {
+  db.prepare("UPDATE usuarios SET session_id=NULL WHERE cuenta_id=?").run(req.body.cuenta_id);
+  res.json({ ok: true });
+});
+
+app.get("/api/admin/resumen", admin, (req, res) => {
+  const cuentas = db.prepare("SELECT * FROM cuentas").all();
+  const activas = cuentas.filter((c) => estadoCuenta(c) === "activa").length;
+  const prueba = cuentas.filter((c) => estadoCuenta(c) === "prueba").length;
+  res.json({
+    cuentas: cuentas.length,
+    activas,
+    prueba,
+    vencidas: cuentas.length - activas - prueba,
+    facturas: db.prepare("SELECT COUNT(*) c FROM facturas").get().c,
+    ocr_mes: db.prepare("SELECT COUNT(*) c FROM consumo WHERE tipo='ocr' AND substr(creado_en,1,7)=?").get(mesActual()).c,
+    ingreso_mes: db.prepare("SELECT COALESCE(SUM(monto),0) s FROM pagos WHERE substr(registrado_en,1,7)=?").get(mesActual()).s,
+    envio_codigos: DEV || process.env.MOSTRAR_CODIGO === "true" ? "visible en pantalla" : "requiere WhatsApp/SMS",
+    codigo_maestro: process.env.CODIGO_MAESTRO ? "activo" : "no configurado",
+  });
 });
 
 app.post("/api/admin/pago", admin, (req, res) => {
