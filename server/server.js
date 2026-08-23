@@ -1,12 +1,30 @@
 import express from "express";
 import cors from "cors";
 import crypto from "crypto";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
 import db from "./db.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const CARPETA_APP = path.join(__dirname, "..", "app");
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "25mb" }));
-app.use(express.static("../app"));
+app.use(express.static(CARPETA_APP));
+
+// Ruta corta y explícita del panel: /admin  (además de /admin.html)
+app.get("/admin", (req, res) => {
+  const archivo = path.join(CARPETA_APP, "admin.html");
+  if (!fs.existsSync(archivo)) {
+    return res.status(404).send(
+      "<h2>Falta admin.html</h2><p>El archivo <code>app/admin.html</code> no está en el servidor. " +
+      "Súbalo a su repositorio dentro de la carpeta <code>app</code> y vuelva a desplegar.</p>"
+    );
+  }
+  res.sendFile(archivo);
+});
 
 const PORT = process.env.PORT || 3000;
 const DEV = process.env.NODE_ENV !== "production";
@@ -253,15 +271,35 @@ Formato:
     });
 
     if (!r.ok) {
-      const detalle = await r.text();
-      console.error("Error de la API de IA:", detalle.slice(0, 500));
-      return res.status(502).json({ error: "No se pudo procesar la imagen en este momento." });
+      let detalle = "";
+      try {
+        const j = JSON.parse(await r.text());
+        detalle = j?.error?.message || "";
+      } catch (e) { /* respuesta no JSON */ }
+      console.error("Error de la API de IA:", r.status, detalle);
+
+      // Mensajes claros según lo que respondió la API.
+      if (r.status === 401) return res.status(502).json({ error: "La clave de IA (ANTHROPIC_API_KEY) es inválida o está vencida." });
+      if (r.status === 400 && /image/i.test(detalle)) return res.status(502).json({ error: "La imagen no fue aceptada: " + detalle });
+      if (r.status === 400) return res.status(502).json({ error: "La API rechazó la solicitud: " + (detalle || "revise el modelo configurado en MODELO.") });
+      if (r.status === 404) return res.status(502).json({ error: `El modelo "${process.env.MODELO || "claude-sonnet-4-6"}" no existe o no está disponible para su cuenta.` });
+      if (r.status === 429) return res.status(502).json({ error: "Demasiadas solicitudes seguidas. Espere un momento y reintente." });
+      if (r.status === 529 || r.status === 503) return res.status(502).json({ error: "El servicio de IA está saturado. Reintente en unos segundos." });
+      return res.status(502).json({ error: `La API respondió ${r.status}. ${detalle}`.trim() });
     }
 
     const data = await r.json();
     const texto = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
+    if (!texto.trim()) return res.status(502).json({ error: "La IA no devolvió texto. Reintente con otra foto." });
+
     const limpio = texto.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(limpio);
+    let parsed;
+    try {
+      parsed = JSON.parse(limpio);
+    } catch (e) {
+      console.error("Respuesta no interpretable:", limpio.slice(0, 400));
+      return res.status(502).json({ error: "La IA respondió en un formato inesperado. Reintente o registre la factura a mano." });
+    }
 
     db.prepare("INSERT INTO consumo (cuenta_id,tipo) VALUES (?, 'ocr')").run(req.cuenta.id);
 
@@ -275,8 +313,8 @@ Formato:
     }
     res.json(parsed);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "No se pudo leer la factura. Intente con otra foto o regístrela a mano." });
+    console.error("Fallo al extraer factura:", e);
+    res.status(500).json({ error: "No se pudo leer la factura: " + (e.message || "error desconocido") + ". Puede registrarla a mano." });
   }
 });
 
@@ -520,6 +558,39 @@ app.post("/api/admin/plan", admin, (req, res) => {
 app.post("/api/admin/cerrar-sesion", admin, (req, res) => {
   db.prepare("UPDATE usuarios SET session_id=NULL WHERE cuenta_id=?").run(req.body.cuenta_id);
   res.json({ ok: true });
+});
+
+/** Diagnóstico: prueba la clave y el modelo de IA, y dice exactamente qué falla. */
+app.get("/api/admin/probar-ia", admin, async (req, res) => {
+  const modelo = process.env.MODELO || "claude-sonnet-4-6";
+  if (!process.env.ANTHROPIC_API_KEY)
+    return res.json({ ok: false, modelo, detalle: "No hay ANTHROPIC_API_KEY configurada en el servidor." });
+
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({ model: modelo, max_tokens: 16, messages: [{ role: "user", content: "Responde solo: ok" }] }),
+    });
+    const cuerpo = await r.text();
+    if (r.ok) return res.json({ ok: true, modelo, detalle: "La clave y el modelo funcionan correctamente." });
+
+    let msg = cuerpo;
+    try { msg = JSON.parse(cuerpo)?.error?.message || cuerpo; } catch (e) {}
+    const pistas = {
+      401: "La clave es inválida o fue revocada. Genere una nueva en console.anthropic.com.",
+      404: `El modelo "${modelo}" no existe o su cuenta no tiene acceso. Pruebe con claude-sonnet-4-6 en la variable MODELO.`,
+      400: "La solicitud fue rechazada. Revise el nombre del modelo en la variable MODELO.",
+      429: "Límite de solicitudes alcanzado.",
+    };
+    res.json({ ok: false, modelo, estado: r.status, detalle: msg, sugerencia: pistas[r.status] || "Revise el saldo y los límites de su cuenta de Anthropic." });
+  } catch (e) {
+    res.json({ ok: false, modelo, detalle: "No se pudo contactar la API: " + e.message });
+  }
 });
 
 app.get("/api/admin/resumen", admin, (req, res) => {
