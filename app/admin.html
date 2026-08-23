@@ -97,6 +97,22 @@ async function panel(){
   w.appendChild(g);
   w.appendChild($(`<p class="sm mut">Envío de códigos: <b>${esc(r.envio_codigos)}</b> · Código maestro: <b>${esc(r.codigo_maestro)}</b></p>`));
 
+  // ---- Diagnóstico de la IA ----
+  w.appendChild($(`<h2>Lectura de facturas por foto</h2>`));
+  const dc=$(`<div class="card"></div>`);
+  dc.appendChild($(`<p class="sm mut" style="margin-top:0">Si al subir fotos aparece un error, pruebe aquí la conexión con la IA.</p>`));
+  const dres=$(`<div></div>`); 
+  const bd=$(`<button>Probar conexión con la IA</button>`);
+  bd.onclick=async()=>{ bd.disabled=true; bd.textContent="Probando…"; dres.innerHTML="";
+    try{ const d=await api("/api/admin/probar-ia");
+      dres.appendChild($(`<div class="${d.ok?'ok':'err'}" style="margin-top:10px">
+        <b>${d.ok?"✅ Funciona correctamente":"❌ Hay un problema"}</b><br>
+        Modelo: <code>${esc(d.modelo)}</code>${d.estado?` · Respuesta: ${d.estado}`:""}<br>
+        ${esc(d.detalle||"")}${d.sugerencia?`<br><b>Qué hacer:</b> ${esc(d.sugerencia)}`:""}</div>`));
+    }catch(e){ dres.appendChild($(`<div class="err" style="margin-top:10px">${esc(e.message)}</div>`)); }
+    bd.disabled=false; bd.textContent="Probar conexión con la IA"; };
+  dc.appendChild(bd); dc.appendChild(dres); w.appendChild(dc);
+
   // ---- Códigos pendientes ----
   w.appendChild($(`<h2>Códigos de acceso pendientes</h2>`));
   const cc=$(`<div class="card"></div>`);

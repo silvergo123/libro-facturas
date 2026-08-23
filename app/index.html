@@ -273,10 +273,10 @@ function vAgregar(m){
     lab.querySelector("input").onchange=(e)=>procesarFotos(e.target);
     c.appendChild(lab);
     S.cola.forEach(q=>{
-      const est={proc:"Procesando…",listo:`${q.datos?.renglones?.length||0} artículo(s) detectado(s)`,error:"No se pudo leer",guardado:"Guardada ✓"}[q.estado];
-      const el=$(`<div class="q"><img src="${q.prev}"><div style="flex:1;min-width:0">
+      const est={proc:"Procesando…",listo:`${q.datos?.renglones?.length||0} artículo(s) detectado(s)`,error:q.motivo||"No se pudo leer",guardado:"Guardada ✓"}[q.estado];
+      const el=$(`<div class="q">${q.prev?`<img src="${q.prev}">`:`<div style="width:38px;height:38px;background:#f0efee;border-radius:6px;flex-shrink:0"></div>`}<div style="flex:1;min-width:0">
         <div class="xs b" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(q.estado==="listo"?(q.datos.proveedor||"Sin identificar"):q.nombre)}</div>
-        <div class="xs mut">${est}</div></div></div>`);
+        <div class="xs ${q.estado==="error"?"":"mut"}" style="${q.estado==="error"?"color:#b91c1c":""}">${esc(est)}</div></div></div>`);
       if(q.estado==="listo"){ const b=$(`<button class="btn btn3" style="width:auto;padding:6px 10px;font-size:12px">Revisar</button>`);
         b.onclick=()=>{ cargarBorrador(q.datos); S.activo=q.id; B.modo="manual"; render(); }; el.appendChild(b); }
       c.appendChild(el);
@@ -424,17 +424,51 @@ async function guardarFactura(){
   }catch(e){ toast(e.message); }
 }
 
+/** Reduce la foto antes de enviarla: las fotos de celular pesan varios MB y
+ *  la API rechaza imágenes muy grandes. 1600 px de lado mayor basta para leer
+ *  una factura y baja el peso a unos cientos de KB. */
+function reducirImagen(file, maxLado=1600, calidad=0.82){
+  return new Promise((resolve,reject)=>{
+    const lector=new FileReader();
+    lector.onerror=()=>reject(new Error("No se pudo leer el archivo."));
+    lector.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error("El archivo no parece ser una imagen."));
+      img.onload=()=>{
+        try{
+          let w=img.width, h=img.height;
+          const escala=Math.min(1, maxLado/Math.max(w,h));
+          w=Math.max(1,Math.round(w*escala)); h=Math.max(1,Math.round(h*escala));
+          const c=document.createElement("canvas"); c.width=w; c.height=h;
+          c.getContext("2d").drawImage(img,0,0,w,h);
+          const dataUrl=c.toDataURL("image/jpeg",calidad);
+          resolve({dataUrl, base64:dataUrl.split(",")[1], kb:Math.round(dataUrl.length*0.75/1024)});
+        }catch(e){ reject(new Error("No se pudo procesar la imagen.")); }
+      };
+      img.src=lector.result;
+    };
+    lector.readAsDataURL(file);
+  });
+}
+
 async function procesarFotos(input){
   const files=[...(input.files||[])]; if(!files.length) return;
   for(const f of files){
     const id=Math.random().toString(36).slice(2);
-    const prev=await new Promise(res=>{const r=new FileReader();r.onload=()=>res(r.result);r.readAsDataURL(f);});
-    S.cola.push({id,nombre:f.name,prev,estado:"proc"}); render();
+    let img;
+    try{
+      img=await reducirImagen(f);
+    }catch(e){
+      S.cola.push({id,nombre:f.name,prev:"",estado:"error",motivo:e.message}); render(); continue;
+    }
+    S.cola.push({id,nombre:f.name,prev:img.dataUrl,estado:"proc",kb:img.kb}); render();
     try{
       const datos=await api("/api/facturas/extraer",{method:"POST",
-        body:JSON.stringify({imagen_base64:prev.split(",")[1],media_type:f.type||"image/jpeg"})});
+        body:JSON.stringify({imagen_base64:img.base64,media_type:"image/jpeg"})});
       const q=S.cola.find(x=>x.id===id); q.estado="listo"; q.datos=datos;
-    }catch(e){ const q=S.cola.find(x=>x.id===id); q.estado="error"; toast(e.message); }
+    }catch(e){
+      const q=S.cola.find(x=>x.id===id); q.estado="error"; q.motivo=e.message;
+    }
     render();
   }
   try{ input.value=""; }catch(e){}
