@@ -150,4 +150,5 @@ export const PLANES = [
   { id: "basico",  nombre: "Básico",       precio: 495,  max_facturas_mes: 60,   max_sesiones: 1 },
   { id: "negocio", nombre: "Negocio",      precio: 1200, max_facturas_mes: 200,  max_sesiones: 2 },
   { id: "multi",   nombre: "Multi-usuario",precio: 2500, max_facturas_mes: 600,  max_sesiones: 5 },
+  { id: "propietario", nombre: "Propietario", precio: 0, max_facturas_mes: 1000000, max_sesiones: 5 },
 ];
