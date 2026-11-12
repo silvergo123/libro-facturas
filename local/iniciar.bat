@@ -19,7 +19,7 @@ if not "%NODEMAJOR%"=="22" if not "%NODEMAJOR%"=="24" (
   exit /b 1
 )
 cd /d "%~dp0..\server"
-if not exist node_modules (
+if not exist node_modules\express (
   echo Instalando dependencias por primera vez...
   call npm install
   if errorlevel 1 ( echo Fallo la instalacion. & pause & exit /b 1 )
