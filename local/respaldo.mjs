@@ -1,12 +1,11 @@
-// Copia segura de libro.db (usa la API de respaldo de SQLite, válida aunque la app esté en uso).
+// Copia segura de libro.db (API de respaldo de SQLite; válida aunque la app esté en uso).
 // Uso: node respaldo.mjs "C:\ruta\a\carpeta\de\Drive"
-import { createRequire } from "node:module";
+import { DatabaseSync, backup } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
-const Database = createRequire(path.join(aqui, "..", "server", "package.json"))("better-sqlite3");
 const origen = process.env.DB_PATH || path.join(aqui, "..", "datos", "libro.db");
 const destinoDir = process.argv[2];
 const MANTENER = 30;
@@ -17,8 +16,8 @@ fs.mkdirSync(destinoDir, { recursive: true });
 
 const sello = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
 const destino = path.join(destinoDir, `libro-${sello}.db`);
-const db = new Database(origen, { readonly: true, fileMustExist: true });
-await db.backup(destino);
+const db = new DatabaseSync(origen);
+await backup(db, destino);
 db.close();
 console.log("Respaldo creado:", destino);
 

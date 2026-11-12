@@ -1,7 +1,7 @@
-import Database from "better-sqlite3";
+import { abrirBase } from "./sqlite.js";
 import { PROVEEDORES, PRESENTACIONES, PLANES } from "./catalogo.js";
 
-const db = new Database(process.env.DB_PATH || "libro.db");
+const db = await abrirBase(process.env.DB_PATH || "libro.db");
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 
