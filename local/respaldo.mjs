@@ -1,11 +1,12 @@
 // Copia segura de libro.db (usa la API de respaldo de SQLite, válida aunque la app esté en uso).
 // Uso: node respaldo.mjs "C:\ruta\a\carpeta\de\Drive"
-import Database from "../server/node_modules/better-sqlite3/lib/index.js";
+import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
+const Database = createRequire(path.join(aqui, "..", "server", "package.json"))("better-sqlite3");
 const origen = process.env.DB_PATH || path.join(aqui, "..", "datos", "libro.db");
 const destinoDir = process.argv[2];
 const MANTENER = 30;
