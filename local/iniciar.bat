@@ -28,6 +28,7 @@ echo.
 echo Servidor en http://localhost:%PORT%   (NO cierre esta ventana)
 echo Base de datos: %DB_PATH%
 echo.
+start "Respaldos Libro Facturas" /min "%~dp0respaldar-bucle.bat"
 :otra_vez
 node server.js
 echo El servidor se detuvo. Reiniciando en 5 segundos... (cierre la ventana para salir)
